@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.9'
+
+      - name: Build for arm64
+        run: |
+          swift build -c release --arch arm64
+          mkdir -p dist
+          cp .build/arm64-apple-macosx/release/async-closure-lint dist/async-closure-lint-arm64
+
+      - name: Build for x86_64
+        run: |
+          swift build -c release --arch x86_64
+          cp .build/x86_64-apple-macosx/release/async-closure-lint dist/async-closure-lint-x86_64
+
+      - name: Create Universal Binary
+        run: |
+          lipo -create \
+            dist/async-closure-lint-arm64 \
+            dist/async-closure-lint-x86_64 \
+            -output dist/async-closure-lint
+          chmod +x dist/async-closure-lint
+
+      - name: Create Archive
+        run: |
+          cd dist
+          tar -czvf async-closure-lint-macos.tar.gz async-closure-lint
+          shasum -a 256 async-closure-lint-macos.tar.gz > async-closure-lint-macos.tar.gz.sha256
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/async-closure-lint-macos.tar.gz
+            dist/async-closure-lint-macos.tar.gz.sha256
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

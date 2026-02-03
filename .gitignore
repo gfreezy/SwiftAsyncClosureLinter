@@ -1,0 +1,22 @@
+# Build
+.build/
+dist/
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+*.xcscmblueprint
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# IDE
+.idea/
+.vscode/
