@@ -29,18 +29,18 @@ This tool helps you catch these issues at build time before they crash in produc
 
 ### Download Binary
 
-Download from [Releases](https://github.com/user/async-closure-lint/releases):
+Download from [Releases](https://github.com/gfreezy/SwiftAsyncClosureLinter/releases):
 
 ```bash
-curl -L https://github.com/user/async-closure-lint/releases/latest/download/async-closure-lint-macos.tar.gz | tar xz
+curl -L https://github.com/gfreezy/SwiftAsyncClosureLinter/releases/latest/download/async-closure-lint-macos.tar.gz | tar xz
 sudo mv async-closure-lint /usr/local/bin/
 ```
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/user/async-closure-lint.git
-cd async-closure-lint
+git clone https://github.com/gfreezy/SwiftAsyncClosureLinter.git
+cd SwiftAsyncClosureLinter
 make install
 ```
 
