@@ -15,8 +15,6 @@ jobs:
 
       - name: Setup Swift
         uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: '5.9'
 
       - name: Build for arm64
         run: |
