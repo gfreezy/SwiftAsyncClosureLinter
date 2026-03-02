@@ -215,6 +215,102 @@ final class AsyncClosureLinterTests: XCTestCase {
         XCTAssertEqual(violations.count, 0)
     }
 
+    // MARK: - @Observable Class Tests
+
+    func testObservableClassWithAsyncClosure() {
+        let source = """
+            @Observable
+            class ViewModel {
+                var onTap: () async -> Void = {}
+            }
+            """
+
+        let violations = linter.lint(source: source)
+        XCTAssertEqual(violations.count, 1)
+        XCTAssertEqual(violations.first?.variableName, "onTap")
+    }
+
+    func testObservableClassWithMainActor() {
+        let source = """
+            @Observable
+            class ViewModel {
+                var onTap: @MainActor () async -> Void = {}
+            }
+            """
+
+        let violations = linter.lint(source: source)
+        XCTAssertEqual(violations.count, 0)
+    }
+
+    func testObservableClassOptionalAsyncClosure() {
+        let source = """
+            @Observable
+            class ViewModel {
+                var onRefresh: (() async -> Void)?
+            }
+            """
+
+        let violations = linter.lint(source: source)
+        XCTAssertEqual(violations.count, 1)
+        XCTAssertEqual(violations.first?.variableName, "onRefresh")
+    }
+
+    func testObservableClassMultipleViolations() {
+        let source = """
+            @Observable
+            class ViewModel {
+                var onLoad: () async -> Void = {}
+                var onRefresh: (() async throws -> Void)?
+                var title: String = ""
+                var onSubmit: @MainActor () async -> Void = {}
+            }
+            """
+
+        let violations = linter.lint(source: source)
+        XCTAssertEqual(violations.count, 2)
+        let names = violations.map { $0.variableName }
+        XCTAssertTrue(names.contains("onLoad"))
+        XCTAssertTrue(names.contains("onRefresh"))
+    }
+
+    func testObservableFinalClass() {
+        let source = """
+            @Observable
+            final class ViewModel {
+                var onTap: () async -> Void = {}
+            }
+            """
+
+        let violations = linter.lint(source: source)
+        XCTAssertEqual(violations.count, 1)
+    }
+
+    func testObservableClassViolationMessage() {
+        let source = """
+            @Observable
+            class ViewModel {
+                var onTap: () async -> Void = {}
+            }
+            """
+
+        let violations = linter.lint(source: source, filePath: "ViewModel.swift")
+        XCTAssertEqual(violations.count, 1)
+        let description = violations.first?.description ?? ""
+        XCTAssertTrue(description.contains("@Observable class"))
+        XCTAssertTrue(description.contains("@MainActor"))
+    }
+
+    func testNonObservableClassStillIgnored() {
+        let source = """
+            class PlainClass {
+                var onTap: () async -> Void = {}
+            }
+            """
+
+        let violations = linter.lint(source: source)
+        XCTAssertEqual(violations.count, 0)
+    }
+
     func testNestedStructInView() {
         let source = """
             struct MyView: View {

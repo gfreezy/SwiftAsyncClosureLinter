@@ -10,13 +10,15 @@ public struct Violation: Equatable, CustomStringConvertible {
     public let variableName: String
     public let message: String
 
-    public init(filePath: String, line: Int, column: Int, variableName: String) {
+    public init(
+        filePath: String, line: Int, column: Int, variableName: String, contextName: String = "SwiftUI View"
+    ) {
         self.filePath = filePath
         self.line = line
         self.column = column
         self.variableName = variableName
         self.message =
-            "Async closure property '\(variableName)' in SwiftUI View should have @MainActor attribute"
+            "Async closure property '\(variableName)' in \(contextName) should have @MainActor attribute"
     }
 
     public var description: String {
@@ -35,19 +37,29 @@ public final class AsyncClosureLinter {
         options: []
     )
 
-    /// Quick check if source might contain relevant code (View struct + async)
+    /// Regex to match @Observable class
+    private static let observableClassRegex = try! NSRegularExpression(
+        pattern: #"@Observable\s+(final\s+)?class\s+\w+"#,
+        options: []
+    )
+
+    /// Quick check if source might contain relevant code (View struct / @Observable class + async)
     /// Returns false if we can skip parsing entirely
     private func mightContainViolation(_ source: String) -> Bool {
         // Must have async keyword
         guard source.contains("async") else {
             return false
         }
-        // Must have a struct conforming to View
         let range = NSRange(source.startIndex..., in: source)
-        guard Self.viewStructRegex.firstMatch(in: source, options: [], range: range) != nil else {
-            return false
+        // Check for a struct conforming to View
+        if Self.viewStructRegex.firstMatch(in: source, options: [], range: range) != nil {
+            return true
         }
-        return true
+        // Check for @Observable class
+        if Self.observableClassRegex.firstMatch(in: source, options: [], range: range) != nil {
+            return true
+        }
+        return false
     }
 
     /// Lint a Swift source string
@@ -90,12 +102,17 @@ final class AsyncClosureVisitor: SyntaxVisitor {
     let source: String
     private(set) var violations: [Violation] = []
 
-    /// Stack to track nested structs - each entry indicates if that struct is a View
-    private var structStack: [(name: String, isView: Bool)] = []
+    /// Stack to track nested types - each entry indicates if that type should be linted
+    private var typeStack: [(name: String, shouldLint: Bool, contextName: String)] = []
 
-    /// Returns true if the current (innermost) struct is a View
-    private var isDirectlyInsideView: Bool {
-        structStack.last?.isView ?? false
+    /// Returns true if the current (innermost) type should be linted
+    private var shouldLintCurrentType: Bool {
+        typeStack.last?.shouldLint ?? false
+    }
+
+    /// Returns the context name for the current type (for violation messages)
+    private var currentContextName: String {
+        typeStack.last?.contextName ?? "SwiftUI View"
     }
 
     init(filePath: String, source: String) {
@@ -106,18 +123,31 @@ final class AsyncClosureVisitor: SyntaxVisitor {
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
         let isView = conformsToView(node)
-        structStack.append((name: node.name.text, isView: isView))
+        typeStack.append((name: node.name.text, shouldLint: isView, contextName: "SwiftUI View"))
         return .visitChildren
     }
 
     override func visitPost(_ node: StructDeclSyntax) {
-        if let last = structStack.last, last.name == node.name.text {
-            structStack.removeLast()
+        if let last = typeStack.last, last.name == node.name.text {
+            typeStack.removeLast()
+        }
+    }
+
+    override func visit(_ node: ClassDeclSyntax) -> SyntaxVisitorContinueKind {
+        let isObservable = hasObservableAttribute(node)
+        typeStack.append(
+            (name: node.name.text, shouldLint: isObservable, contextName: "@Observable class"))
+        return .visitChildren
+    }
+
+    override func visitPost(_ node: ClassDeclSyntax) {
+        if let last = typeStack.last, last.name == node.name.text {
+            typeStack.removeLast()
         }
     }
 
     override func visit(_ node: VariableDeclSyntax) -> SyntaxVisitorContinueKind {
-        guard isDirectlyInsideView else { return .visitChildren }
+        guard shouldLintCurrentType else { return .visitChildren }
 
         for binding in node.bindings {
             if let typeAnnotation = binding.typeAnnotation {
@@ -130,6 +160,17 @@ final class AsyncClosureVisitor: SyntaxVisitor {
         }
 
         return .visitChildren
+    }
+
+    /// Check if a class has @Observable attribute
+    private func hasObservableAttribute(_ node: ClassDeclSyntax) -> Bool {
+        node.attributes.contains { attr in
+            if case let .attribute(attribute) = attr {
+                return attribute.attributeName.description.trimmingCharacters(in: .whitespaces)
+                    == "Observable"
+            }
+            return false
+        }
     }
 
     /// Check if a struct conforms to View protocol
@@ -232,7 +273,8 @@ final class AsyncClosureVisitor: SyntaxVisitor {
             filePath: filePath,
             line: lineColumn.line,
             column: lineColumn.column,
-            variableName: variableName
+            variableName: variableName,
+            contextName: currentContextName
         )
         violations.append(violation)
     }
